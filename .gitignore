@@ -5,6 +5,7 @@
 .Rhistory
 .RData
 .Ruserdata
+Rplots.pdf
 *.Rproj
 
 # R package compilation

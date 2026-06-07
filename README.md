@@ -3,7 +3,28 @@
 [![R](https://img.shields.io/badge/R-%3E%3D%204.1.0-blue)](https://www.r-project.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Repurp** is an R package for building and visualising drug–gene / biomarker interaction networks for drug repurposing studies. It ships **11 visualisation backends**, a curated reference of 18 established atopic-dermatitis (AD) drugs, and a unified colour system shared across all plot types.
+**Repurp** is an R package for building and visualising drug–gene / biomarker interaction networks for drug repurposing studies. It ships **15 visualisation backends**, a curated reference of 18 established atopic-dermatitis (AD) drugs, and a unified colour system shared across all plot types.
+
+---
+
+## Gallery
+
+| | |
+|:---:|:---:|
+| **igraph — Full Bipartite** | **igraph — Core (genes ≥ 2 drugs)** |
+| <img src="man/figures/fig_igraph_full.png" width="100%"> | <img src="man/figures/fig_igraph_core.png" width="100%"> |
+| `plot_dgi_igraph()` | `plot_dgi_igraph_core()` |
+| **ggraph Enhanced — Core** | **AD Drug–Biomarker Network** |
+| <img src="man/figures/fig_ggraph_enhanced.png" width="100%"> | <img src="man/figures/fig_ad_network.png" width="100%"> |
+| `plot_dgi_ggraph_enhanced(mode="core")` | `plot_dgi_ad_network()` |
+| **Chord Diagram — AD Drugs × Biomarkers** | **Heatmap — Drug × Gene** |
+| <img src="man/figures/fig_chord.svg" width="100%"> | <img src="man/figures/fig_heatmap.png" width="100%"> |
+| `plot_chord_dgi()` | `plot_dgi_heatmap()` |
+| **Dot Matrix — Gene × Drug-Class** | **Sankey — Drug Class → Drug → Gene** |
+| <img src="man/figures/fig_dotmatrix.png" width="100%"> | <img src="man/figures/fig_sankey.png" width="100%"> |
+| `plot_dgi_dotmatrix()` | `plot_dgi_sankey()` |
+
+All plots above were generated from the same synthetic 30-edge AD drug–biomarker dataset using `<30 lines of code`.
 
 ---
 

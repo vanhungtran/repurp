@@ -1,0 +1,40 @@
+Package: Repurp
+Title: Drug Repurposing — Drug-Gene/Biomarker Interaction Network Visualisation
+Version: 0.2.0
+Authors@R: person("Tran", "Hung", email = "tranhungydhcm10@gmail.com", role = c("aut", "cre"))
+Description: Provides functions to build and visualise drug–gene/biomarker interaction
+    networks for drug repurposing studies. Supports six visualisation back-ends:
+    static igraph/qgraph Fruchterman-Reingold layouts (SVG + PNG export),
+    interactive visNetwork HTML widgets, publication-quality ggraph tripartite networks
+    (Gene × Drug × Pathway), circlize chord diagrams, ggplot2 tile heatmaps,
+    ggalluvial Sankey flow diagrams, and Gene × Drug-Class dot matrix plots.
+    Includes a curated reference table of 18 established atopic-dermatitis (AD) drugs
+    with mechanism-of-action edges.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    dplyr,
+    tidyr,
+    tibble,
+    rlang,
+    igraph,
+    qgraph
+Suggests:
+    visNetwork,
+    ggraph,
+    tidygraph,
+    ggplot2,
+    ggrepel,
+    ggnewscale,
+    ggalluvial,
+    circlize,
+    rbioapi,
+    knitr,
+    rmarkdown
+Depends:
+    R (>= 4.1.0)
+VignetteBuilder: knitr
+LazyData: true
+LazyDataCompression: xz

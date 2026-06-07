@@ -1,0 +1,809 @@
+---
+title: "Repurp: Drug–Gene Interaction Network Visualisation"
+subtitle: "A Complete Workflow for Drug Repurposing Studies"
+author: "Lucas VH Tran"
+date: "`r Sys.Date()`"
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 3
+    fig_width: 9
+    fig_height: 7
+    css: bioc_style.css
+    includes:
+      in_header: header.html
+vignette: >
+  %\VignetteIndexEntry{Repurp: Drug--Gene Interaction Network Visualisation}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  collapse   = TRUE,
+  comment    = "#>",
+  message    = FALSE,
+  warning    = FALSE,
+  fig.align  = "center",
+  fig.width  = 9,
+  fig.height = 7
+)
+# Suppress Windows font-metric warnings from base-R grid/igraph device
+suppressWarnings(grDevices::pdf(NULL))
+```
+
+---
+
+# Introduction
+
+**Repurp** provides a unified, multi-backend workflow for building and
+visualising drug–gene / biomarker interaction networks, with a focus on
+atopic dermatitis (AD) drug repurposing. It ships seven complementary
+visualisation backends, a curated AD drug reference table, and a built-in
+colour system shared across all plot types.
+
+**Visualisation backends:**
+
+| # | Function(s) | Engine | Output | Best for |
+|---|-------------|--------|--------|----------|
+| 1 | `plot_dgi_igraph()` / `plot_dgi_igraph_core()` | igraph + qgraph | SVG + PNG | Fast bipartite, large networks |
+| 2 | `plot_dgi_tripartite_igraph()` | igraph + qgraph | SVG + PNG | Gene × Drug × Pathway (base R) |
+| 3 | `plot_dgi_ggraph()` / `plot_dgi_ggraph_core()` | ggraph + tidygraph | SVG + PNG | Tripartite, publication panels |
+| 4 | `plot_dgi_ggraph_enhanced()` | ggraph + ggrepel + ggnewscale | SVG + PNG | Hub-labelled FR-layout, journals |
+| 5 | `plot_dgi_ad_network()` | ggplot2 + ggrepel | SVG + PNG | Curated AD drug–biomarker network |
+| 6 | `build_visnetwork()` / `build_visnetwork_tripartite()` | visNetwork | Interactive HTML | Exploratory, supplementary data |
+| 7 | `plot_chord_dgi()` / `plot_chord_dgi_combined()` | circlize | SVG | Drug class overview, talks |
+| 8 | `plot_dgi_heatmap()` | ggplot2 | SVG + PNG | Drug × Gene tile matrix |
+| 9 | `plot_dgi_sankey()` | ggplot2 + ggalluvial | SVG + PNG | Drug class → Drug → Gene flow |
+| 10 | `plot_dgi_dotmatrix()` | ggplot2 | SVG + PNG | Gene × Drug-class bubble matrix |
+
+---
+
+# Installation
+
+```r
+# Install from local source build
+install.packages("path/to/Repurp", repos = NULL, type = "source")
+
+# Core suggested packages (all visualisations)
+install.packages(c(
+  "ggplot2", "ggrepel", "ggnewscale",   # ggraph-family plots
+  "ggraph", "tidygraph",                 # ggraph layouts
+  "visNetwork",                          # interactive HTML
+  "circlize",                            # chord diagrams
+  "ggalluvial"                           # Sankey flow diagram
+))
+```
+
+---
+
+# Package data
+
+```{r load-packages}
+library(Repurp)
+library(dplyr)
+```
+
+## Curated AD drugs
+
+`repurp_ad_drugs()` returns a tibble of 18 established AD treatments with
+drug class and molecular targets:
+
+```{r ad-drugs}
+repurp_ad_drugs()
+```
+
+## Curated MOA edges
+
+`repurp_ad_edges()` returns 106 mechanism-of-action (MOA) edges linking each
+AD drug to biomarker genes with edge type (`"direct"` or `"indirect"`):
+
+```{r ad-edges}
+repurp_ad_edges() |> dplyr::count(from, edge_type) |> head(12)
+```
+
+## Colour palettes
+
+```{r palettes}
+# Edge / interaction-type palette (14 types)
+data.frame(type = names(dgi_edge_colors), hex = dgi_edge_colors)
+
+# Node-type palette
+dgi_node_colors
+
+# Drug-class palette (13 classes)
+data.frame(class = names(repurp_class_colors()), hex = repurp_class_colors())
+```
+
+---
+
+# Synthetic demo dataset {#demo-data}
+
+All examples below use a small in-memory dataset built from the curated AD
+data, so you can run the vignette without a DGIdb download.
+
+```{r build-synth}
+# Compact synthetic DGI table (30 gene–drug edges)
+synth_dgi <- tibble::tribble(
+  ~Gene,     ~Drug,             ~InteractionType,
+  "IL13",    "Dupilumab",       "INHIBITOR",
+  "IL4R",    "Dupilumab",       "INHIBITOR",
+  "IL13",    "Tralokinumab",    "INHIBITOR",
+  "IL13",    "Lebrikizumab",    "INHIBITOR",
+  "JAK1",    "Upadacitinib",    "INHIBITOR",
+  "JAK1",    "Abrocitinib",     "INHIBITOR",
+  "JAK1",    "Baricitinib",     "INHIBITOR",
+  "JAK2",    "Baricitinib",     "INHIBITOR",
+  "JAK2",    "Ruxolitinib",     "INHIBITOR",
+  "JAK1",    "Ruxolitinib",     "INHIBITOR",
+  "PDE4B",   "Crisaborole",     "INHIBITOR",
+  "PDE4D",   "Crisaborole",     "INHIBITOR",
+  "PDE4A",   "Roflumilast",     "INHIBITOR",
+  "PDE4B",   "Roflumilast",     "INHIBITOR",
+  "IL31RA",  "Nemolizumab",     "INHIBITOR",
+  "AHR",     "Tapinarof",       "AGONIST",
+  "NR3C1",   "Hydrocortisone",  "AGONIST",
+  "NR3C1",   "Triamcinolone",   "AGONIST",
+  "NR3C1",   "Betamethasone",   "AGONIST",
+  "FKBP1A",  "Tacrolimus",      "BINDER",
+  "FKBP1A",  "Pimecrolimus",    "BINDER",
+  "PPP3CA",  "Tacrolimus",      "INHIBITOR",
+  "PPP3CA",  "Cyclosporine",    "INHIBITOR",
+  "DHFR",    "Methotrexate",    "INHIBITOR",
+  "ATIC",    "Methotrexate",    "INHIBITOR",
+  "IL18",    "Hydrocortisone",  "MODULATOR",
+  "IL22",    "Triamcinolone",   "MODULATOR",
+  "IL33",    "Betamethasone",   "MODULATOR",
+  "STAT6",   "Upadacitinib",    "INHIBITOR",
+  "TSLP",    "Dupilumab",       "MODULATOR"
+)
+
+# Verify the standardised structure
+glimpse(synth_dgi)
+```
+
+## Preparing DGIdb data (your own files)
+
+If you have downloaded interaction data from
+[DGIdb v5](https://www.dgidb.org/), use `prepare_dgi_data()` to standardise
+it:
+
+```r
+net_dat <- prepare_dgi_data(
+  interactions = "interactions.tsv",   # path to DGIdb TSV download
+  gene_list    = c("IL13", "IL4R", "JAK1", "JAK2", "PDE4B", "TSLP")
+)
+```
+
+`prepare_dgi_data()` normalises column names, coerces `NA`/empty interaction
+types to `"None"`, and filters to your gene list.
+
+---
+
+# Part 1: igraph / qgraph static networks
+
+The igraph backend draws using base-R `plot.igraph()` with a
+Fruchterman-Reingold layout computed by `qgraph`. Output is written to
+SVG + PNG when `out_dir` is specified.
+
+## Layout algorithm
+
+The layout is computed by minimising the energy function:
+
+$$
+E(X) = \sum_{u < v} \left[
+  k^2 \frac{1}{\|x_u - x_v\|} \;-\; \|x_u - x_v\|^2 \mathbf{1}_{\{u,v\}\in E}
+\right]
+$$
+
+where $k = \sqrt{A / n}$ is the optimal pairwise distance ($A$ = canvas area,
+$n$ = node count). Nodes repel uniformly but only connected pairs attract.
+
+## 1a — Full bipartite network
+
+```{r igraph-full, eval=requireNamespace("igraph", quietly=TRUE), fig.height=7}
+plot_dgi_igraph(
+  net_dat     = synth_dgi,
+  title       = "AD Drug–Biomarker Network",
+  gene_color  = "#009E73",
+  drug_color  = "#F0E442",
+  vertex_size = 7,
+  label_cex   = 0.75
+  # out_dir = "results/"  # uncomment to save SVG + PNG
+)
+```
+
+Key parameters:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `vertex_size` | `6` | Node circle radius |
+| `label_cex` | `0.7` | Label scaling factor |
+| `area_factor` | `2.0` | Canvas area multiplier — increase to spread nodes |
+| `repulse_factor` | `1.0` | Node repulsion strength |
+| `gene_color` | `"#009E73"` | Gene node fill |
+| `drug_color` | `"#F0E442"` | Drug node fill |
+
+## 1b — Core network (hub genes only)
+
+`plot_dgi_igraph_core()` filters to genes with ≥ `min_gene_edges`
+drug connections before plotting:
+
+```{r igraph-core, eval=requireNamespace("igraph", quietly=TRUE), fig.height=6}
+plot_dgi_igraph_core(
+  net_dat        = synth_dgi,
+  title          = "Core AD Network — genes ≥ 2 drugs",
+  min_gene_edges = 2L
+)
+```
+
+## 1c — Tripartite: Gene × Drug × Pathway
+
+`plot_dgi_tripartite_igraph()` accepts a third node type — **Pathway** — via
+`pathway_edges`. Without pathway edges it reduces to the bipartite case.
+
+```r
+# Build pathway_edges from STRING enrichment (see rbioapi)
+library(rbioapi)
+enrich <- rbioapi::rba_string_enrichment(ids = unique(synth_dgi$Gene), species = 9606)
+pathway_edges <- dplyr::bind_rows(
+  enrich[["KEGG"]] |> dplyr::mutate(category = "KEGG"),
+  enrich[["Process"]] |> dplyr::mutate(category = "GO_Process")
+) |>
+  dplyr::filter(fdr < 0.05) |>
+  tidyr::unnest(inputGenes) |>
+  dplyr::select(from = inputGenes, to = description, edge_type = category)
+
+dgi_e <- dplyr::select(synth_dgi, from = Gene, to = Drug, edge_type = InteractionType)
+
+plot_dgi_tripartite_igraph(
+  dgi_edges     = dgi_e,
+  pathway_edges = pathway_edges,
+  title         = "Tripartite: Gene × Drug × Pathway",
+  out_dir       = "results/"
+)
+```
+
+---
+
+# Part 2: ggraph publication-quality networks
+
+The ggraph backend returns a `ggplot` object — fully composable with
+`patchwork`, `cowplot`, and standard ggplot2 theming.
+
+```{r ggraph-setup, eval=requireNamespace("ggraph", quietly=TRUE)}
+# Convert to the from/to/edge_type format expected by all ggraph functions
+dgi_e <- dplyr::transmute(
+  synth_dgi,
+  from      = Gene,
+  to        = Drug,
+  edge_type = InteractionType
+)
+```
+
+## 2a — Full tripartite view
+
+```{r ggraph-full, eval=requireNamespace("ggraph", quietly=TRUE)}
+p_full <- plot_dgi_ggraph(
+  dgi_edges        = dgi_e,
+  title            = "Drug–Gene Network (ggraph FR layout)",
+  min_drug_targets = 1L,
+  seed             = 42L
+)
+p_full
+```
+
+## 2b — Core view (Kamada-Kawai layout)
+
+`plot_dgi_ggraph_core()` uses a Kamada-Kawai layout (default) and labels
+every retained node:
+
+```{r ggraph-core, eval=requireNamespace("ggraph", quietly=TRUE), fig.height=6}
+p_core <- plot_dgi_ggraph_core(
+  dgi_edges      = dgi_e,
+  title          = "Core Drug–Gene Network (KK layout)",
+  min_gene_edges = 2L,
+  seed           = 42L
+)
+p_core
+```
+
+## 2c — Enhanced: FR layout + ggrepel + ggnewscale {.tabset}
+
+`plot_dgi_ggraph_enhanced()` uses a `qgraph` FR layout with separate colour
+scales for nodes and edges (via `ggnewscale`), and `ggrepel` for
+non-overlapping labels. Two modes are available:
+
+### Full mode
+
+```{r ggraph-enh-full, eval=requireNamespace("ggrepel", quietly=TRUE)}
+p_enh_full <- plot_dgi_ggraph_enhanced(
+  dgi_edges        = dgi_e,
+  mode             = "full",
+  title            = "Enhanced DGI Network — full view",
+  min_drug_targets = 2L,
+  seed             = 42L
+)
+p_enh_full
+```
+
+### Core mode
+
+```{r ggraph-enh-core, eval=requireNamespace("ggrepel", quietly=TRUE)}
+p_enh_core <- plot_dgi_ggraph_enhanced(
+  dgi_edges      = dgi_e,
+  mode           = "core",
+  title          = "Enhanced DGI Network — core view",
+  min_gene_edges = 2L,
+  seed           = 42L
+)
+p_enh_core
+```
+
+### Mode comparison
+
+| Parameter | `"full"` | `"core"` |
+|-----------|----------|----------|
+| Gene filter | none | genes ≥ `min_gene_edges` drugs |
+| Drug labels | hub drugs only (≥ `min_drug_targets`) | all drugs |
+| Layout area | `2 × n²·⁰⁵` | same |
+| `ggrepel` force | `0.5` | `1.0` |
+| Use case | complete landscape | focused hub view |
+
+---
+
+## 2d — AD drug–biomarker network
+
+`plot_dgi_ad_network()` draws the curated AD drugs with drug-class colour
+coding and MOA edges:
+
+```{r ad-network, eval=requireNamespace("ggrepel", quietly=TRUE), fig.height=8}
+# Filter curated edges to genes present in our demo dataset
+ad_e <- repurp_ad_edges() |>
+  dplyr::filter(to %in% unique(synth_dgi$Gene))
+
+p_adn <- plot_dgi_ad_network(
+  edges     = ad_e,
+  drug_info = repurp_ad_drugs(),
+  title     = "AD Treatment Drug–Biomarker Network"
+)
+p_adn
+```
+
+Drug nodes are coloured by therapeutic category. Solid edges = direct
+molecular target or DGIdb confirmed; dashed edges = pathway-level regulation.
+
+---
+
+# Part 3: Interactive visNetwork HTML widget
+
+`build_visnetwork()` returns a `visNetwork` htmlwidget for in-document
+rendering (RMarkdown / Quarto) or standalone HTML export.
+
+## 3a — Bipartite widget
+
+```{r visnet-bipartite, eval=requireNamespace("visNetwork", quietly=TRUE)}
+vn_bip <- build_visnetwork(
+  net_dat = synth_dgi,
+  title   = "Interactive AD Drug–Biomarker Network"
+)
+vn_bip
+```
+
+## 3b — Tripartite widget
+
+```r
+# Requires pathway_edges data frame (see Part 1c for how to build it)
+vn_tri <- build_visnetwork_tripartite(
+  net_dat       = synth_dgi,
+  pathway_edges = pathway_edges,
+  title         = "Tripartite Interactive Network"
+)
+vn_tri
+```
+
+## 3c — Save to HTML
+
+```r
+save_visnetwork(vn_bip, "results/Fig_DGI_interactive.html", selfcontained = TRUE)
+```
+
+`selfcontained = TRUE` embeds all JavaScript and CSS in a single portable
+`.html` file (recommended for supplementary data submissions).
+
+---
+
+# Part 4: Chord diagrams (circlize)
+
+Chord diagrams show drug-class sectors on one arc and gene sectors on the
+other, with link ribbons coloured by interaction type. The adjacency matrix
+used for plotting is returned invisibly.
+
+## 4a — Basic chord diagram
+
+```{r chord-basic, eval=requireNamespace("circlize", quietly=TRUE), fig.height=8, fig.width=8}
+# Build chord-ready edges from curated AD data
+chord_e <- repurp_ad_edges() |>
+  dplyr::filter(to %in% unique(synth_dgi$Gene)) |>
+  dplyr::left_join(
+    repurp_ad_drugs() |> dplyr::select(drug_name, class = category),
+    by = c("from" = "drug_name")
+  ) |>
+  dplyr::rename(drug = from, gene = to) |>
+  dplyr::mutate(int_type = "Curated MOA")
+
+plot_chord_dgi(
+  edges = chord_e,
+  title = "AD Drugs × Biomarker Chord (curated)"
+)
+```
+
+Key parameters:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `transparency` | `0.15` | Link ribbon opacity (0 = opaque) |
+| `min_drug_targets` | `1L` | Drop drugs with fewer gene targets |
+| `gene_color` | `"#009E73"` | Gene sector colour |
+| `svg_w`, `svg_h` | `32`, `32` | SVG output dimensions (inches) |
+
+## 4b — Combined chord: curated AD + DGIdb hub drugs
+
+`plot_chord_dgi_combined()` merges curated MOA edges with DGIdb hub drugs
+(≥ `min_dgidb_targets` genes):
+
+```r
+# Build DGIdb hub edges (requires your own DGIdb data)
+dgi_chord <- dplyr::transmute(synth_dgi,
+  drug = Drug, gene = Gene, int_type = InteractionType
+)
+
+curated_chord <- repurp_ad_edges() |>
+  dplyr::filter(to %in% unique(synth_dgi$Gene)) |>
+  dplyr::left_join(
+    repurp_ad_drugs() |> dplyr::select(drug_name, class = category),
+    by = c("from" = "drug_name")
+  ) |>
+  dplyr::rename(drug = from, gene = to) |>
+  dplyr::mutate(int_type = "Curated MOA")
+
+plot_chord_dgi_combined(
+  dgi_edges     = dgi_chord,
+  curated_edges = curated_chord,
+  title         = "AD + DGIdb Hub Drugs — Combined Chord",
+  min_dgidb_targets = 2L,
+  out_dir       = "results/"
+)
+```
+
+---
+
+# Part 5: Tile heatmap — Drug × Gene matrix {#heatmap}
+
+`plot_dgi_heatmap()` renders a ggplot2 tile matrix where rows are drugs
+sorted by drug class then degree, columns are genes sorted by degree, and
+fill encodes the dominant interaction type for each drug–gene pair.
+
+This plot is ideal for publications where a compact, annotation-rich overview
+of the entire drug × gene space is needed.
+
+```{r heatmap, eval=requireNamespace("ggplot2", quietly=TRUE), fig.height=7, fig.width=9}
+p_heat <- plot_dgi_heatmap(
+  dgi_edges  = dgi_e,
+  drug_info  = repurp_ad_drugs(),
+  title      = "Drug × Gene Interaction Heatmap",
+  max_drugs  = 20L,
+  max_genes  = 15L
+)
+p_heat
+```
+
+Key parameters:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `max_drugs` | `60L` | Top-N drugs by degree to display |
+| `max_genes` | `50L` | Top-N genes by degree to display |
+| `drug_info` | `NULL` | Data frame with `drug_name` + `category` for row strips |
+| `edge_palette` | `dgi_edge_colors` | Named hex vector for interaction types |
+
+**Reading the heatmap:** Each cell represents a drug–gene pair with at least
+one recorded interaction. The fill colour shows the most frequent interaction
+type between that drug and gene. White cells indicate absence of interaction.
+Rows are grouped by drug class, making it easy to spot within-class gene
+targeting patterns.
+
+---
+
+# Part 6: Sankey / alluvial flow diagram {#sankey}
+
+`plot_dgi_sankey()` renders a three-axis alluvial plot (requires `ggalluvial`):
+
+$$
+\text{Drug Class} \;\longrightarrow\; \text{Drug} \;\longrightarrow\; \text{Gene}
+$$
+
+Band width is proportional to the number of connections. Colour can encode
+either drug class (`fill_by = "drug_class"`) or interaction type
+(`fill_by = "edge_type"`).
+
+## 6a — Colour by drug class
+
+```{r sankey-class, eval=requireNamespace("ggalluvial", quietly=TRUE), fig.height=8, fig.width=10}
+p_sank_cls <- plot_dgi_sankey(
+  dgi_edges  = dgi_e,
+  drug_info  = repurp_ad_drugs(),
+  fill_by    = "drug_class",
+  title      = "Drug Class → Drug → Gene Flow (by class)",
+  max_genes  = 15L
+)
+p_sank_cls
+```
+
+## 6b — Colour by interaction type
+
+```{r sankey-type, eval=requireNamespace("ggalluvial", quietly=TRUE), fig.height=8, fig.width=10}
+p_sank_typ <- plot_dgi_sankey(
+  dgi_edges  = dgi_e,
+  drug_info  = repurp_ad_drugs(),
+  fill_by    = "edge_type",
+  title      = "Drug Class → Drug → Gene Flow (by interaction type)",
+  max_genes  = 15L
+)
+p_sank_typ
+```
+
+Key parameters:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `fill_by` | `"drug_class"` | Alluvia fill: `"drug_class"` or `"edge_type"` |
+| `min_connections` | `1L` | Minimum edges per drug–gene pair to draw |
+| `max_genes` | `30L` | Top-N genes to include |
+
+**Reading the Sankey:** Follow a band from left to right to trace a drug
+class's exposure through individual drugs into specific biomarker genes. Bands
+that widen or narrow indicate unequal distribution of drug–gene connections
+within a class. The `fill_by = "edge_type"` view reveals whether a drug class
+predominantly inhibits, activates, or binds its targets.
+
+---
+
+# Part 7: Dot matrix — Gene × Drug-Class bubble chart {#dotmatrix}
+
+`plot_dgi_dotmatrix()` produces a bubble/balloon plot where:
+
+- **Y axis** = genes (sorted by total connections, most-connected at top)
+- **X axis** = drug classes (sorted by total connections)
+- **Dot size** = number of drug–gene connections within that class
+- **Dot colour** = dominant interaction type
+- **Label inside dot** = exact connection count
+
+This is arguably the most information-dense single-panel summary for a drug
+repurposing manuscript.
+
+```{r dotmatrix, eval=requireNamespace("ggplot2", quietly=TRUE), fig.height=8, fig.width=9}
+p_dot <- plot_dgi_dotmatrix(
+  dgi_edges  = dgi_e,
+  drug_info  = repurp_ad_drugs(),
+  title      = "Gene × Drug-Class Connectivity Matrix",
+  max_genes  = 15L
+)
+p_dot
+```
+
+Key parameters:
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `max_genes` | `40L` | Top-N genes by total degree |
+| `min_connections` | `1L` | Minimum connections to draw a dot |
+| `edge_palette` | `dgi_edge_colors` | Interaction-type colour mapping |
+
+**Reading the dot matrix:** A large dot at position (gene, drug class)
+indicates that multiple drugs in that class target this gene. The colour
+reveals the mechanism: orange dots (ANTAGONIST), red (INHIBITOR), blue
+(AGONIST), purple (BINDER). This view is particularly useful for identifying
+genes that are targeted by multiple drug classes — strong candidates for
+multi-mechanism repurposing strategies.
+
+---
+
+# Part 8: Multi-panel figures with patchwork
+
+All ggraph/ggplot2 plot functions return a `ggplot` object, so they compose
+directly with `patchwork`:
+
+```r
+library(patchwork)
+
+# Build individual panels
+p_enh <- plot_dgi_ggraph_enhanced(dgi_e, mode = "core", seed = 42L)
+p_dot <- plot_dgi_dotmatrix(dgi_e, drug_info = repurp_ad_drugs())
+p_ht  <- plot_dgi_heatmap(dgi_e, drug_info = repurp_ad_drugs())
+
+# Two-column layout with shared title
+(p_enh | p_dot) /
+  p_ht +
+  patchwork::plot_annotation(
+    title    = "AD Drug–Biomarker Network Summary",
+    subtitle = "Left: FR network (core). Right: dot matrix. Bottom: heatmap.",
+    theme    = ggplot2::theme(plot.title = ggplot2::element_text(size = 16, face = "bold"))
+  )
+```
+
+For igraph / circlize base-R plots in multi-panel layouts, use
+`grDevices::recordPlot()` / `replayPlot()` or the `cowplot::draw_grob()`
+approach:
+
+```r
+library(cowplot)
+p_ig <- cowplot::as_grob(~plot_dgi_igraph(synth_dgi))
+cowplot::plot_grid(p_ig, p_enh, ncol = 2, labels = c("A", "B"))
+```
+
+---
+
+# Part 9: Comparing multiple gene sets
+
+A common AD repurposing workflow runs the DGI pipeline separately for two
+differential-expression contrasts and overlays the results:
+
+```r
+# Set 1: systemic AD vs healthy controls
+dgi_sys  <- prepare_dgi_data("dgi_systemic.tsv",   gene_list = de_sys_genes)
+
+# Set 2: non-systemic AD vs healthy controls
+dgi_nsys <- prepare_dgi_data("dgi_nonsystemic.tsv", gene_list = de_nsys_genes)
+
+# Convert both
+e_sys  <- dplyr::transmute(dgi_sys,  from = Gene, to = Drug, edge_type = InteractionType)
+e_nsys <- dplyr::transmute(dgi_nsys, from = Gene, to = Drug, edge_type = InteractionType)
+
+# ggraph panels — returns ggplot, so patchwork works directly
+p1 <- plot_dgi_ggraph_enhanced(e_sys,  mode = "core", title = "Systemic AD")
+p2 <- plot_dgi_ggraph_enhanced(e_nsys, mode = "core", title = "Non-systemic AD")
+p1 + p2
+
+# Dot-matrix side-by-side
+d1 <- plot_dgi_dotmatrix(e_sys,  drug_info = repurp_ad_drugs(), title = "Systemic AD")
+d2 <- plot_dgi_dotmatrix(e_nsys, drug_info = repurp_ad_drugs(), title = "Non-systemic AD")
+d1 + d2
+```
+
+Genes present in both sets can be highlighted by adding a shared-gene column
+to the node aesthetics before plotting.
+
+---
+
+# Colour reference
+
+## Interaction types (`dgi_edge_colors`)
+
+```{r edge-pal, fig.height=3, fig.width=7, eval=requireNamespace("ggplot2", quietly=TRUE)}
+ec <- data.frame(
+  type  = names(dgi_edge_colors),
+  hex   = unname(dgi_edge_colors),
+  stringsAsFactors = FALSE
+)
+ec$type <- factor(ec$type, levels = rev(ec$type))
+
+ggplot2::ggplot(ec, ggplot2::aes(x = 1, y = type, fill = hex)) +
+  ggplot2::geom_tile(color = "white", width = 0.9, height = 0.85) +
+  ggplot2::geom_text(ggplot2::aes(label = paste0(type, "  ", hex)),
+                     x = 1, size = 3.2, hjust = 0.5, color = "grey10") +
+  ggplot2::scale_fill_identity() +
+  ggplot2::theme_void() +
+  ggplot2::labs(title = "dgi_edge_colors — interaction type palette") +
+  ggplot2::theme(
+    plot.title = ggplot2::element_text(size = 11, face = "bold", hjust = 0.5)
+  )
+```
+
+## Drug classes (`repurp_class_colors()`)
+
+```{r class-pal, fig.height=3.5, fig.width=7, eval=requireNamespace("ggplot2", quietly=TRUE)}
+rc <- data.frame(
+  class = names(repurp_class_colors()),
+  hex   = unname(repurp_class_colors()),
+  stringsAsFactors = FALSE
+)
+rc$class <- factor(rc$class, levels = rev(rc$class))
+
+ggplot2::ggplot(rc, ggplot2::aes(x = 1, y = class, fill = hex)) +
+  ggplot2::geom_tile(color = "white", width = 0.9, height = 0.85) +
+  ggplot2::geom_text(ggplot2::aes(label = paste0(class, "  ", hex)),
+                     x = 1, size = 3.0, hjust = 0.5, color = "grey10") +
+  ggplot2::scale_fill_identity() +
+  ggplot2::theme_void() +
+  ggplot2::labs(title = "repurp_class_colors() — drug class palette") +
+  ggplot2::theme(
+    plot.title = ggplot2::element_text(size = 11, face = "bold", hjust = 0.5)
+  )
+```
+
+## Node types (`dgi_node_colors`)
+
+```{r node-pal}
+data.frame(
+  node_type = names(dgi_node_colors),
+  hex       = unname(dgi_node_colors)
+)
+```
+
+---
+
+# Summary
+
+```{r summary-table, echo=FALSE}
+tbl <- data.frame(
+  `Function` = c(
+    "prepare_dgi_data()",
+    "plot_dgi_igraph()",
+    "plot_dgi_igraph_core()",
+    "plot_dgi_tripartite_igraph()",
+    "plot_dgi_ggraph()",
+    "plot_dgi_ggraph_core()",
+    "plot_dgi_ggraph_enhanced()",
+    "plot_dgi_ad_network()",
+    "build_visnetwork()",
+    "build_visnetwork_tripartite()",
+    "save_visnetwork()",
+    "plot_chord_dgi()",
+    "plot_chord_dgi_combined()",
+    "plot_dgi_heatmap()",
+    "plot_dgi_sankey()",
+    "plot_dgi_dotmatrix()"
+  ),
+  `Engine` = c(
+    "dplyr / stringr",
+    "igraph + qgraph",
+    "igraph + qgraph",
+    "igraph + qgraph",
+    "ggraph + tidygraph",
+    "ggraph + tidygraph",
+    "ggraph + ggrepel + ggnewscale",
+    "ggplot2 + ggrepel + ggnewscale",
+    "visNetwork",
+    "visNetwork",
+    "visNetwork",
+    "circlize",
+    "circlize",
+    "ggplot2",
+    "ggplot2 + ggalluvial",
+    "ggplot2"
+  ),
+  `Output` = c(
+    "tibble",
+    "SVG + PNG",
+    "SVG + PNG",
+    "SVG + PNG",
+    "ggplot",
+    "ggplot",
+    "ggplot",
+    "ggplot",
+    "htmlwidget",
+    "htmlwidget",
+    "HTML file path",
+    "SVG",
+    "SVG",
+    "ggplot",
+    "ggplot",
+    "ggplot"
+  ),
+  `New in v0.2` = c(
+    "", "", "", "", "", "", "", "", "", "", "", "", "",
+    "✓", "✓", "✓"
+  ),
+  check.names = FALSE
+)
+knitr::kable(tbl, caption = "All Repurp exported functions — v0.2.0.")
+```
+
+---
+
+# Session information
+
+```{r session}
+sessionInfo()
+```

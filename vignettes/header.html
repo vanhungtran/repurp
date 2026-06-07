@@ -1,0 +1,552 @@
+<!-- ================================================================
+     Repurp vignette — header.html  v2.0
+     • Branded gradient banner
+     • Full-featured lightbox: zoom-in/out, pan, scroll-wheel, keyboard
+     • Figure hover lift animation (CSS only)
+     • Back-to-top button
+     • Callout classes
+     • Reading-progress bar
+     ================================================================ -->
+
+<!-- ── Reading-progress bar ─────────────────────────────────────── -->
+<div id="rpb" style="
+  position: fixed; top: 0; left: 0;
+  height: 3px; width: 0%;
+  background: linear-gradient(90deg, #1a73e8, #34a853);
+  z-index: 20000;
+  transition: width .12s linear;
+"></div>
+
+<!-- ── Branded banner ───────────────────────────────────────────── -->
+<header style="
+  background: linear-gradient(135deg, #0d1b2a 0%, #0f3460 55%, #1a73e8 100%);
+  color: #fff;
+  padding: 1.5em 2.2em 1.3em;
+  margin: 0 -2em 2.2em;
+  border-radius: 0 0 14px 14px;
+  display: flex;
+  align-items: center;
+  gap: 1.1em;
+  box-shadow: 0 4px 18px rgba(13,27,42,.35);
+">
+  <div style="font-size: 2.6em; line-height:1; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4));">💊</div>
+  <div>
+    <div style="font-size:1.45em; font-weight:800; letter-spacing:.04em; line-height:1;">
+      Repurp
+    </div>
+    <div style="font-size:.8em; opacity:.80; margin-top:.18em; letter-spacing:.01em;">
+      Drug–Gene Interaction Network Visualisation &nbsp;·&nbsp; v0.2.0
+    </div>
+  </div>
+  <nav style="margin-left:auto; font-size:.78em; opacity:.78; text-align:right; line-height:1.7;">
+    <a href="https://www.dgidb.org/" target="_blank"
+       style="color:#a8c8ff; text-decoration:none; border-bottom:1px solid transparent;
+              transition:border-color .18s;"
+       onmouseover="this.style.borderBottomColor='#a8c8ff'"
+       onmouseout="this.style.borderBottomColor='transparent'">DGIdb v5</a><br>
+    Atopic Dermatitis · Drug Repurposing
+  </nav>
+</header>
+
+<!-- ── Styles ───────────────────────────────────────────────────── -->
+<style>
+/* ── Back-to-top ──────────────────────────────────────── */
+#btt {
+  position: fixed; bottom: 2em; right: 1.8em;
+  width: 44px; height: 44px;
+  background: #0f3460; color: #fff;
+  border: none; border-radius: 50%;
+  font-size: 20px; line-height: 44px; text-align: center;
+  cursor: pointer;
+  opacity: 0; pointer-events: none;
+  transition: opacity .28s, background .2s, transform .2s;
+  box-shadow: 0 3px 12px rgba(0,0,0,.28);
+  z-index: 9000;
+}
+#btt.show { opacity: 1; pointer-events: auto; }
+#btt:hover { background: #1a73e8; transform: translateY(-3px); }
+
+/* ── Lightbox overlay ─────────────────────────────────── */
+#lbx {
+  position: fixed; inset: 0;
+  background: rgba(8, 12, 24, 0.92);
+  z-index: 19000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  opacity: 0; pointer-events: none;
+  transition: opacity .22s ease;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+#lbx.open { opacity: 1; pointer-events: all; }
+
+/* Toolbar */
+#lbx-bar {
+  position: absolute; top: 0; left: 0; right: 0;
+  height: 52px;
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: .4em; padding: 0 1.1em;
+  background: linear-gradient(to bottom, rgba(8,12,24,.85) 0%, transparent 100%);
+}
+.lbx-btn {
+  background: rgba(255,255,255,.12);
+  color: #e2e8f0;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 7px;
+  width: 36px; height: 36px;
+  font-size: 18px; line-height: 36px; text-align: center;
+  cursor: pointer;
+  transition: background .16s, transform .14s;
+  user-select: none;
+}
+.lbx-btn:hover { background: rgba(255,255,255,.28); transform: scale(1.1); }
+
+/* Image stage — the panning container */
+#lbx-stage {
+  position: relative;
+  flex: 1;
+  width: 100%;
+  overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+  cursor: zoom-in;
+}
+#lbx-stage.zoomed { cursor: grab; }
+#lbx-stage.grabbing { cursor: grabbing; }
+
+#lbx-img {
+  max-width: 90vw; max-height: 82vh;
+  border-radius: 10px;
+  box-shadow: 0 12px 48px rgba(0,0,0,.65);
+  transform-origin: center center;
+  transform: scale(1) translate(0,0);
+  transition: transform .25s cubic-bezier(.34,1.26,.64,1);
+  will-change: transform;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+/* zoom-in entrance animation */
+@keyframes lbx-open {
+  from { opacity:0; transform: scale(.88) translate(0,0); }
+  to   { opacity:1; transform: scale(1)   translate(0,0); }
+}
+#lbx-img.entering { animation: lbx-open .22s cubic-bezier(.34,1.26,.64,1) forwards; }
+
+/* Caption bar */
+#lbx-caption {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  min-height: 40px;
+  background: linear-gradient(to top, rgba(8,12,24,.88) 0%, transparent 100%);
+  color: #c8d6e8;
+  font-size: .82em; font-style: italic;
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 0.6em 2em 0.8em;
+  text-align: center;
+  pointer-events: none;
+}
+
+/* Zoom counter badge */
+#lbx-zoom-badge {
+  position: absolute; bottom: 3.2em; right: 1.2em;
+  background: rgba(255,255,255,.15);
+  color: #e2e8f0; font-size: .78em;
+  padding: .22em .7em; border-radius: 20px;
+  border: 1px solid rgba(255,255,255,.2);
+  pointer-events: none;
+  transition: opacity .3s;
+}
+
+/* Nav arrows */
+#lbx-prev, #lbx-next {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  background: rgba(255,255,255,.12);
+  border: 1px solid rgba(255,255,255,.2);
+  color: #e2e8f0;
+  width: 42px; height: 42px; border-radius: 50%;
+  font-size: 22px; line-height: 42px; text-align: center;
+  cursor: pointer;
+  transition: background .16s, transform .16s;
+  user-select: none;
+  z-index: 5;
+}
+#lbx-prev { left: 1em; }
+#lbx-next { right: 1em; }
+#lbx-prev:hover { background: rgba(255,255,255,.28); transform: translateY(-50%) scale(1.1); }
+#lbx-next:hover { background: rgba(255,255,255,.28); transform: translateY(-50%) scale(1.1); }
+#lbx-prev.hidden, #lbx-next.hidden { opacity: 0; pointer-events: none; }
+
+/* Thumbnail strip */
+#lbx-thumbs {
+  display: flex; gap: .5em; padding: .55em 1em;
+  background: rgba(8,12,24,.7);
+  overflow-x: auto; max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,.25) transparent;
+}
+#lbx-thumbs img {
+  height: 52px; width: auto;
+  border-radius: 5px;
+  cursor: pointer;
+  opacity: .5;
+  border: 2px solid transparent;
+  transition: opacity .18s, border-color .18s, transform .18s;
+  flex-shrink: 0;
+}
+#lbx-thumbs img:hover  { opacity: .85; transform: scale(1.06); }
+#lbx-thumbs img.active { opacity: 1;   border-color: #1a73e8; }
+
+/* Keyboard hint */
+#lbx-hint {
+  position: absolute; bottom: 3.2em; left: 1.2em;
+  font-size: .7em; color: rgba(255,255,255,.38);
+  pointer-events: none;
+}
+
+/* ── Figure hover lift (safety override) ─────────────── */
+.figure img, p > img, img[src]:not(#lbx-img):not(#lbx-thumbs img) {
+  cursor: zoom-in !important;
+  transition: transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .28s ease, filter .28s ease;
+}
+.figure img:hover,
+p > img:hover,
+img[src]:not(#lbx-img):not(#lbx-thumbs img):hover {
+  transform: scale(1.025) translateY(-4px);
+  box-shadow: 0 14px 40px rgba(15,52,96,.3);
+  filter: brightness(1.04) saturate(1.06);
+}
+</style>
+
+<!-- ── Back-to-top button ────────────────────────────────────────── -->
+<button id="btt" title="Back to top" aria-label="Back to top">↑</button>
+
+<!-- ── Lightbox DOM ─────────────────────────────────────────────── -->
+<div id="lbx" role="dialog" aria-modal="true" aria-label="Figure viewer">
+
+  <!-- Toolbar: zoom in / zoom out / reset / close -->
+  <div id="lbx-bar">
+    <div class="lbx-btn" id="lbx-zin"   title="Zoom in (=)">+</div>
+    <div class="lbx-btn" id="lbx-zout"  title="Zoom out (-)">−</div>
+    <div class="lbx-btn" id="lbx-reset" title="Reset zoom (0)">⊙</div>
+    <div class="lbx-btn" id="lbx-close" title="Close (Esc)">✕</div>
+  </div>
+
+  <!-- Prev / Next arrows -->
+  <div id="lbx-prev" title="Previous (←)">&#8249;</div>
+  <div id="lbx-next" title="Next (→)">&#8250;</div>
+
+  <!-- Image stage -->
+  <div id="lbx-stage">
+    <img id="lbx-img" src="" alt="Figure">
+    <div id="lbx-zoom-badge">100 %</div>
+    <div id="lbx-hint">Scroll to zoom · Drag to pan · ← → to navigate</div>
+  </div>
+
+  <!-- Caption -->
+  <div id="lbx-caption"></div>
+
+  <!-- Thumbnail strip -->
+  <div id="lbx-thumbs"></div>
+
+</div>
+
+<!-- ── Script ───────────────────────────────────────────────────── -->
+<script>
+(function () {
+'use strict';
+
+/* ─── Reading progress bar ─────────────────────────────────────── */
+var rpb = document.getElementById('rpb');
+window.addEventListener('scroll', function () {
+  var s = document.documentElement;
+  var pct = (s.scrollTop / (s.scrollHeight - s.clientHeight)) * 100;
+  rpb.style.width = Math.min(pct, 100) + '%';
+}, { passive: true });
+
+/* ─── Back-to-top ──────────────────────────────────────────────── */
+var btt = document.getElementById('btt');
+window.addEventListener('scroll', function () {
+  btt.classList.toggle('show', window.scrollY > 480);
+}, { passive: true });
+btt.addEventListener('click', function () {
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+/* ─── Lightbox ─────────────────────────────────────────────────── */
+var lbx      = document.getElementById('lbx');
+var lbxImg   = document.getElementById('lbx-img');
+var lbxCap   = document.getElementById('lbx-caption');
+var lbxBadge = document.getElementById('lbx-zoom-badge');
+var lbxStage = document.getElementById('lbx-stage');
+var lbxThumbs = document.getElementById('lbx-thumbs');
+var lbxPrev  = document.getElementById('lbx-prev');
+var lbxNext  = document.getElementById('lbx-next');
+
+/* State */
+var images   = [];   // all zoomable images on page
+var current  = -1;
+var scale    = 1;
+var tx = 0, ty = 0; // pan offsets
+
+var MIN_SCALE = 0.5;
+var MAX_SCALE = 5;
+var STEP      = 0.35;
+
+/* ── Collect images after DOM ready ────────────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+
+  /* query all content images, excluding lightbox internals */
+  var found = Array.from(
+    document.querySelectorAll(
+      '.figure img, #content img, p > img, .sourceCode img'
+    )
+  ).filter(function (el) {
+    return el.id !== 'lbx-img' && !el.closest('#lbx');
+  });
+
+  images = found;
+
+  /* Build thumbnail strip */
+  images.forEach(function (img, i) {
+    var t = document.createElement('img');
+    t.src = img.src;
+    t.alt = 'thumb ' + (i + 1);
+    t.addEventListener('click', function () { open(i); });
+    lbxThumbs.appendChild(t);
+
+    /* wire click on the page image itself */
+    img.addEventListener('click', function () { open(i); });
+  });
+
+  updateArrows();
+});
+
+/* ── Open ───────────────────────────────────────────────────────── */
+function open(idx) {
+  current = idx;
+  var img = images[idx];
+
+  lbxImg.classList.remove('entering');
+  void lbxImg.offsetWidth;          /* force reflow for re-trigger */
+  lbxImg.classList.add('entering');
+
+  lbxImg.src = img.src;
+  lbxImg.alt = img.alt || ('Figure ' + (idx + 1));
+
+  /* Caption: try alt, then nearest figcaption / .caption */
+  var cap = img.alt || '';
+  var fig = img.closest('figure') || img.closest('.figure');
+  if (fig) {
+    var fc = fig.querySelector('figcaption, .caption, p.caption');
+    if (fc) cap = fc.textContent;
+  }
+  lbxCap.textContent = cap;
+
+  resetTransform();
+  lbx.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  highlightThumb(idx);
+  updateArrows();
+}
+
+/* ── Close ──────────────────────────────────────────────────────── */
+function close() {
+  lbx.classList.remove('open');
+  document.body.style.overflow = '';
+  lbxImg.src = '';
+  current = -1;
+}
+
+/* ── Navigate ───────────────────────────────────────────────────── */
+function navigate(delta) {
+  var next = current + delta;
+  if (next < 0 || next >= images.length) return;
+  open(next);
+}
+
+function updateArrows() {
+  if (images.length <= 1) {
+    lbxPrev.classList.add('hidden');
+    lbxNext.classList.add('hidden');
+    return;
+  }
+  lbxPrev.classList.toggle('hidden', current <= 0);
+  lbxNext.classList.toggle('hidden', current >= images.length - 1);
+}
+
+function highlightThumb(idx) {
+  var thumbs = lbxThumbs.querySelectorAll('img');
+  thumbs.forEach(function (t, i) {
+    t.classList.toggle('active', i === idx);
+  });
+  if (thumbs[idx]) {
+    thumbs[idx].scrollIntoView({ inline: 'center', behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+/* ── Transform helpers ──────────────────────────────────────────── */
+function applyTransform(animated) {
+  lbxImg.style.transition = animated
+    ? 'transform .25s cubic-bezier(.34,1.26,.64,1)'
+    : 'none';
+  lbxImg.style.transform = 'scale(' + scale + ') translate(' + tx + 'px,' + ty + 'px)';
+  lbxBadge.textContent = Math.round(scale * 100) + ' %';
+
+  lbxStage.className = scale > 1 ? 'zoomed' : '';
+}
+
+function resetTransform() {
+  scale = 1; tx = 0; ty = 0;
+  applyTransform(true);
+}
+
+function zoomBy(delta, cx, cy) {
+  var prev  = scale;
+  scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale + delta));
+  if (scale === prev) return;
+
+  /* Zoom toward the cursor point */
+  var rect = lbxImg.getBoundingClientRect();
+  var ox = (cx - rect.left  - rect.width  / 2) / prev;
+  var oy = (cy - rect.top   - rect.height / 2) / prev;
+  tx -= ox * (scale - prev);
+  ty -= oy * (scale - prev);
+
+  applyTransform(true);
+}
+
+/* ── Scroll-wheel zoom ──────────────────────────────────────────── */
+lbxStage.addEventListener('wheel', function (e) {
+  e.preventDefault();
+  var delta = e.deltaY < 0 ? STEP : -STEP;
+  zoomBy(delta, e.clientX, e.clientY);
+}, { passive: false });
+
+/* ── Click to toggle 2× zoom ───────────────────────────────────── */
+lbxStage.addEventListener('click', function (e) {
+  if (e.target !== lbxStage && e.target !== lbxImg) return;
+  if (scale > 1) {
+    resetTransform();
+  } else {
+    zoomBy(1, e.clientX, e.clientY);
+  }
+});
+
+/* ── Toolbar buttons ────────────────────────────────────────────── */
+document.getElementById('lbx-zin').addEventListener('click', function (e) {
+  e.stopPropagation();
+  var r = lbxStage.getBoundingClientRect();
+  zoomBy(STEP, r.left + r.width / 2, r.top + r.height / 2);
+});
+document.getElementById('lbx-zout').addEventListener('click', function (e) {
+  e.stopPropagation();
+  var r = lbxStage.getBoundingClientRect();
+  zoomBy(-STEP, r.left + r.width / 2, r.top + r.height / 2);
+});
+document.getElementById('lbx-reset').addEventListener('click', function (e) {
+  e.stopPropagation();
+  resetTransform();
+});
+document.getElementById('lbx-close').addEventListener('click', function (e) {
+  e.stopPropagation();
+  close();
+});
+lbxPrev.addEventListener('click', function (e) { e.stopPropagation(); navigate(-1); });
+lbxNext.addEventListener('click', function (e) { e.stopPropagation(); navigate(+1); });
+
+/* ── Click overlay background to close ─────────────────────────── */
+lbx.addEventListener('click', function (e) {
+  if (e.target === lbx) close();
+});
+
+/* ── Drag / pan ─────────────────────────────────────────────────── */
+var dragging = false, dragX = 0, dragY = 0, startTx = 0, startTy = 0;
+
+lbxImg.addEventListener('mousedown', function (e) {
+  if (scale <= 1) return;
+  e.preventDefault();
+  dragging = true;
+  dragX = e.clientX; dragY = e.clientY;
+  startTx = tx; startTy = ty;
+  lbxStage.classList.add('grabbing');
+});
+
+window.addEventListener('mousemove', function (e) {
+  if (!dragging) return;
+  tx = startTx + (e.clientX - dragX) / scale;
+  ty = startTy + (e.clientY - dragY) / scale;
+  applyTransform(false);
+});
+
+window.addEventListener('mouseup', function () {
+  if (!dragging) return;
+  dragging = false;
+  lbxStage.classList.remove('grabbing');
+});
+
+/* ── Touch support ──────────────────────────────────────────────── */
+var touches = {};
+var pinchDist0 = 0, scaleAtPinch = 1;
+
+lbxStage.addEventListener('touchstart', function (e) {
+  Array.from(e.changedTouches).forEach(function (t) { touches[t.identifier] = t; });
+  var pts = Object.values(touches);
+  if (pts.length === 2) {
+    pinchDist0   = dist(pts[0], pts[1]);
+    scaleAtPinch = scale;
+  } else if (pts.length === 1) {
+    dragX = pts[0].clientX; dragY = pts[0].clientY;
+    startTx = tx; startTy = ty;
+    dragging = true;
+  }
+  e.preventDefault();
+}, { passive: false });
+
+lbxStage.addEventListener('touchmove', function (e) {
+  Array.from(e.changedTouches).forEach(function (t) { touches[t.identifier] = t; });
+  var pts = Object.values(touches);
+  if (pts.length === 2) {
+    var d = dist(pts[0], pts[1]);
+    scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, scaleAtPinch * d / pinchDist0));
+    applyTransform(false);
+  } else if (pts.length === 1 && dragging) {
+    tx = startTx + (pts[0].clientX - dragX) / scale;
+    ty = startTy + (pts[0].clientY - dragY) / scale;
+    applyTransform(false);
+  }
+  e.preventDefault();
+}, { passive: false });
+
+lbxStage.addEventListener('touchend', function (e) {
+  Array.from(e.changedTouches).forEach(function (t) { delete touches[t.identifier]; });
+  dragging = false;
+}, { passive: true });
+
+function dist(a, b) {
+  return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+}
+
+/* ── Double-tap / double-click to reset ─────────────────────────── */
+var lastTap = 0;
+lbxStage.addEventListener('touchend', function () {
+  var now = Date.now();
+  if (now - lastTap < 320) resetTransform();
+  lastTap = now;
+});
+
+/* ── Keyboard ───────────────────────────────────────────────────── */
+document.addEventListener('keydown', function (e) {
+  if (!lbx.classList.contains('open')) return;
+  switch (e.key) {
+    case 'Escape':                     close();         break;
+    case 'ArrowLeft':  case 'a':       navigate(-1);    break;
+    case 'ArrowRight': case 'd':       navigate(+1);    break;
+    case '=': case '+':                zoomBy(+STEP, window.innerWidth/2, window.innerHeight/2); break;
+    case '-': case '_':                zoomBy(-STEP, window.innerWidth/2, window.innerHeight/2); break;
+    case '0':                          resetTransform(); break;
+    case 'ArrowUp':                    e.preventDefault(); ty += 30; applyTransform(true); break;
+    case 'ArrowDown':                  e.preventDefault(); ty -= 30; applyTransform(true); break;
+  }
+});
+
+})();
+</script>

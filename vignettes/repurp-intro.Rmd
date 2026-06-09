@@ -180,7 +180,85 @@ types to `"None"`, and filters to your gene list.
 
 ---
 
-# Part 1: igraph / qgraph static networks
+# Part 1: Candidate prioritisation and coverage analysis
+
+The analysis helpers convert visual network edges into ranked repurposing
+tables. They accept the package's common edge formats, including
+`Gene` / `Drug` / `InteractionType`, DGIdb-style columns, and `from` / `to`
+edge lists.
+
+```{r candidate-standardise}
+dgi_std <- standardize_dgi_edges(synth_dgi)
+dgi_std |> head(8)
+```
+
+## 1a - Rank candidate drugs
+
+`score_drug_repurposing()` ranks drugs by weighted biomarker coverage. Use
+`gene_weights` to prioritise biomarkers from differential-expression,
+proteomics, GWAS, or pathway analyses.
+
+```{r candidate-rank}
+biomarkers <- c("IL13", "IL4R", "JAK1", "JAK2", "PDE4B", "TSLP")
+
+ranked_drugs <- score_drug_repurposing(
+  dgi_std,
+  biomarkers = biomarkers,
+  gene_weights = c(IL13 = 2, IL4R = 2, JAK1 = 1.5, JAK2 = 1, PDE4B = 1, TSLP = 1.5)
+)
+
+ranked_drugs |>
+  dplyr::select(rank, drug, category, score, target_count, coverage, targets)
+```
+
+## 1b - Biomarker and class coverage
+
+Use `summarize_biomarker_coverage()` to find well-covered biomarkers and
+targets that may need additional evidence sources. Use
+`summarize_drug_classes()` to summarise the therapeutic classes represented
+in a network.
+
+```{r candidate-coverage}
+summarize_biomarker_coverage(dgi_std, biomarkers = biomarkers) |>
+  dplyr::select(gene, drug_count, drug_class_count, drugs)
+
+summarize_drug_classes(dgi_std, biomarkers = biomarkers) |>
+  dplyr::select(category, drug_count, target_count, coverage, drugs)
+```
+
+## 1c - Expression reversal scoring
+
+`score_expression_reversal()` combines DGI edges with differential-expression
+statistics. Positive scores indicate interactions expected to oppose the
+disease expression direction, for example inhibition of an up-regulated
+biomarker.
+
+```{r candidate-reversal}
+deg_stats <- tibble::tibble(
+  gene = c("IL13", "IL4R", "JAK1", "JAK2", "PDE4B", "TSLP"),
+  logFC = c(1.4, 1.1, 0.7, 0.5, 0.9, 1.2),
+  padj = c(0.001, 0.002, 0.02, 0.04, 0.01, 0.005)
+)
+
+score_expression_reversal(dgi_std, deg_stats) |>
+  dplyr::select(rank, drug, category, reversal_score, supportive_edges,
+                conflicting_edges, targets)
+```
+
+For curated AD mechanism-of-action edges, direction is detected automatically:
+
+```{r candidate-curated}
+score_drug_repurposing(
+  repurp_ad_edges(),
+  biomarkers = biomarkers
+) |>
+  dplyr::select(rank, drug, category, score, target_count, coverage, targets) |>
+  head(10)
+```
+
+---
+
+# Part 2: igraph / qgraph static networks
 
 The igraph backend draws using base-R `plot.igraph()` with a
 Fruchterman-Reingold layout computed by `qgraph`. Output is written to
@@ -266,7 +344,7 @@ plot_dgi_tripartite_igraph(
 
 ---
 
-# Part 2: ggraph publication-quality networks
+# Part 3: ggraph publication-quality networks
 
 The ggraph backend returns a `ggplot` object — fully composable with
 `patchwork`, `cowplot`, and standard ggplot2 theming.
@@ -375,7 +453,7 @@ molecular target or DGIdb confirmed; dashed edges = pathway-level regulation.
 
 ---
 
-# Part 3: Interactive visNetwork HTML widget
+# Part 4: Interactive visNetwork HTML widget
 
 `build_visnetwork()` returns a `visNetwork` htmlwidget for in-document
 rendering (RMarkdown / Quarto) or standalone HTML export.
@@ -413,7 +491,7 @@ save_visnetwork(vn_bip, "results/Fig_DGI_interactive.html", selfcontained = TRUE
 
 ---
 
-# Part 4: Chord diagrams (circlize)
+# Part 5: Chord diagrams (circlize)
 
 Chord diagrams show drug-class sectors on one arc and gene sectors on the
 other, with link ribbons coloured by interaction type. The adjacency matrix
@@ -478,7 +556,7 @@ plot_chord_dgi_combined(
 
 ---
 
-# Part 5: Tile heatmap — Drug × Gene matrix {#heatmap}
+# Part 6: Tile heatmap — Drug × Gene matrix {#heatmap}
 
 `plot_dgi_heatmap()` renders a ggplot2 tile matrix where rows are drugs
 sorted by drug class then degree, columns are genes sorted by degree, and
@@ -515,7 +593,7 @@ targeting patterns.
 
 ---
 
-# Part 6: Sankey / alluvial flow diagram {#sankey}
+# Part 7: Sankey / alluvial flow diagram {#sankey}
 
 `plot_dgi_sankey()` renders a three-axis alluvial plot (requires `ggalluvial`):
 
@@ -569,7 +647,7 @@ predominantly inhibits, activates, or binds its targets.
 
 ---
 
-# Part 7: Dot matrix — Gene × Drug-Class bubble chart {#dotmatrix}
+# Part 8: Dot matrix — Gene × Drug-Class bubble chart {#dotmatrix}
 
 `plot_dgi_dotmatrix()` produces a bubble/balloon plot where:
 
@@ -609,7 +687,7 @@ multi-mechanism repurposing strategies.
 
 ---
 
-# Part 8: Multi-panel figures with patchwork
+# Part 9: Multi-panel figures with patchwork
 
 All ggraph/ggplot2 plot functions return a `ggplot` object, so they compose
 directly with `patchwork`:
@@ -644,7 +722,7 @@ cowplot::plot_grid(p_ig, p_enh, ncol = 2, labels = c("A", "B"))
 
 ---
 
-# Part 9: Comparing multiple gene sets
+# Part 10: Comparing multiple gene sets
 
 A common AD repurposing workflow runs the DGI pipeline separately for two
 differential-expression contrasts and overlays the results:
@@ -739,6 +817,11 @@ data.frame(
 tbl <- data.frame(
   `Function` = c(
     "prepare_dgi_data()",
+    "standardize_dgi_edges()",
+    "score_drug_repurposing()",
+    "summarize_biomarker_coverage()",
+    "summarize_drug_classes()",
+    "score_expression_reversal()",
     "plot_dgi_igraph()",
     "plot_dgi_igraph_core()",
     "plot_dgi_tripartite_igraph()",
@@ -757,6 +840,11 @@ tbl <- data.frame(
   ),
   `Engine` = c(
     "dplyr / stringr",
+    "base R / dplyr",
+    "dplyr",
+    "dplyr",
+    "dplyr",
+    "dplyr",
     "igraph + qgraph",
     "igraph + qgraph",
     "igraph + qgraph",
@@ -775,6 +863,11 @@ tbl <- data.frame(
   ),
   `Output` = c(
     "tibble",
+    "tibble",
+    "ranked tibble",
+    "summary tibble",
+    "summary tibble",
+    "ranked tibble",
     "SVG + PNG",
     "SVG + PNG",
     "SVG + PNG",
@@ -792,8 +885,9 @@ tbl <- data.frame(
     "ggplot"
   ),
   `New in v0.2` = c(
-    "", "", "", "", "", "", "", "", "", "", "", "", "",
-    "✓", "✓", "✓"
+    "", "Yes", "Yes", "Yes", "Yes", "Yes",
+    "", "", "", "", "", "", "", "", "", "", "", "",
+    "Yes", "Yes", "Yes"
   ),
   check.names = FALSE
 )

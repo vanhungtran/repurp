@@ -67,22 +67,22 @@ plot_chord_dgi <- function(edges,
   mat_ordered <- mat_data[drug_order, gene_order, drop = FALSE]
 
   # ---- Sector colours ----
-  drug_col_vec <- setNames(
+  drug_col_vec <- stats::setNames(
     drug_class_colors[drug_meta$class[match(drug_order, drug_meta$drug)]],
     drug_order
   )
-  gene_col_vec <- setNames(rep(gene_color, length(gene_order)), gene_order)
+  gene_col_vec <- stats::setNames(rep(gene_color, length(gene_order)), gene_order)
   all_cols <- c(drug_col_vec, gene_col_vec)
 
   # ---- Interaction-type link colours ----
   ist <- dgi_interaction_styles
   int_type_colors <- c(
     `Curated MOA` = "#404040",
-    setNames(ist$link_color, ist$interaction_type)
+    stats::setNames(ist$link_color, ist$interaction_type)
   )
   int_type_lty <- c(
     `Curated MOA` = 1L,
-    setNames(ist$lty, ist$interaction_type)
+    stats::setNames(ist$lty, ist$interaction_type)
   )
 
   col_mat <- matrix("#F0F0F0", nrow(mat_ordered), ncol(mat_ordered),

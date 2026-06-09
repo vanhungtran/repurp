@@ -3,7 +3,7 @@
 [![R](https://img.shields.io/badge/R-%3E%3D%204.1.0-blue)](https://www.r-project.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Repurp** is an R package for building and visualising drug–gene / biomarker interaction networks for drug repurposing studies. It ships **15 visualisation backends**, a curated reference of 18 established atopic-dermatitis (AD) drugs, and a unified colour system shared across all plot types.
+**Repurp** is an R package for building, analysing, and visualising drug-gene / biomarker interaction networks for drug repurposing studies. It ships **15 visualisation backends**, candidate prioritisation helpers, a curated reference of 18 established atopic-dermatitis (AD) drugs, and a unified colour system shared across all plot types.
 
 ---
 
@@ -137,6 +137,47 @@ net_dat <- prepare_dgi_data(
 )
 # Returns tibble: Gene | Drug | InteractionType | [Source] | [interaction_score]
 ```
+
+---
+
+## Candidate Prioritisation
+
+```r
+# Standardise common edge formats into gene | drug | interaction_type
+dgi <- standardize_dgi_edges(net_dat)
+
+# Rank drugs by weighted biomarker coverage
+ranked <- score_drug_repurposing(
+  dgi,
+  biomarkers = c("IL13", "IL4R", "JAK1", "JAK2", "PDE4B"),
+  gene_weights = c(IL13 = 2, IL4R = 2, JAK1 = 1.5, JAK2 = 1, PDE4B = 1)
+)
+
+# Find biomarkers with strong or weak drug coverage
+coverage <- summarize_biomarker_coverage(dgi)
+
+# Summarise pharmacological classes represented in the network
+class_summary <- summarize_drug_classes(
+  repurp_ad_edges(),
+  direction = "drug_to_gene"
+)
+
+# Prioritise drugs expected to reverse disease expression direction
+deg <- tibble::tibble(
+  gene = c("IL13", "IL4R", "JAK1", "JAK2"),
+  logFC = c(1.4, 1.1, -0.7, 0.5),
+  padj = c(0.001, 0.002, 0.02, 0.04)
+)
+reversal <- score_expression_reversal(dgi, deg)
+```
+
+| Function | Use it for |
+|----------|------------|
+| `standardize_dgi_edges()` | Convert DGIdb, Repurp, and `from`/`to` edge lists into `gene`, `drug`, `interaction_type` columns |
+| `score_drug_repurposing()` | Rank candidate drugs by weighted biomarker coverage and evidence weights |
+| `summarize_biomarker_coverage()` | Find biomarkers with strong, weak, or missing drug coverage |
+| `summarize_drug_classes()` | Summarise therapeutic classes represented in the network |
+| `score_expression_reversal()` | Prioritise drugs expected to oppose disease gene-expression direction |
 
 ---
 

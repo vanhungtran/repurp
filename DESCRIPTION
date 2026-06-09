@@ -1,7 +1,9 @@
 Package: Repurp
 Title: Drug Repurposing — Drug-Gene/Biomarker Interaction Network Visualisation
 Version: 0.2.0
-Authors@R: person("Tran", "Hung", email = "tranhungydhcm10@gmail.com", role = c("aut", "cre"))
+Authors@R: person("Tran", "Hung", email = "tranhungydhcm@gmail.com", role = c("aut", "cre"))
+Author: Hung Tran [aut, cre]
+Maintainer: Hung Tran <tranhungydhcm@gmail.com>
 Description: Provides functions to build and visualise drug–gene/biomarker interaction
     networks for drug repurposing studies. Supports six visualisation back-ends:
     static igraph/qgraph Fruchterman-Reingold layouts (SVG + PNG export),
@@ -13,7 +15,7 @@ Description: Provides functions to build and visualise drug–gene/biomarker int
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Imports:
     dplyr,
     tidyr,
